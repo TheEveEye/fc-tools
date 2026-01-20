@@ -51,8 +51,9 @@ function App() {
   const [linkTypeByKey, setLinkTypeByKey] = useState<Record<string, EsiInventoryType | null>>({})
   const [shipTypeByName, setShipTypeByName] = useState<Record<string, EsiInventoryType | null>>({})
   const [esiError, setEsiError] = useState<string | null>(null)
-  const [shipTypesAll, setShipTypesAll] = useState<EsiInventoryType[]>([])
+  const [shipTypesCombat, setShipTypesCombat] = useState<EsiInventoryType[]>([])
   const [shipTypesMining, setShipTypesMining] = useState<EsiInventoryType[]>([])
+  const [shipTypesExpedition, setShipTypesExpedition] = useState<EsiInventoryType[]>([])
   const [focusedLinkKey, setFocusedLinkKey] = useState<string | null>(null)
 
   useEffect(() => {
@@ -100,20 +101,24 @@ function App() {
     let cancelled = false
     ;(async () => {
       try {
-        const { all, mining } = await fetchCommandBurstShipTypes()
+        const { combat, mining, expedition } = await fetchCommandBurstShipTypes()
         if (cancelled) return
-        setShipTypesAll(all)
+        setShipTypesCombat(combat)
         setShipTypesMining(mining)
+        setShipTypesExpedition(expedition)
         setShipTypeByName((prev) => {
           const next = { ...prev }
-          for (const t of all) next[t.name.toLowerCase()] = t
+          for (const t of combat) next[t.name.toLowerCase()] = t
+          for (const t of mining) next[t.name.toLowerCase()] = t
+          for (const t of expedition) next[t.name.toLowerCase()] = t
           return next
         })
       } catch {
         // keep UI clean: ship dropdown is optional
         if (!cancelled) {
-          setShipTypesAll([])
+          setShipTypesCombat([])
           setShipTypesMining([])
+          setShipTypesExpedition([])
         }
       }
     })()
@@ -228,7 +233,12 @@ function App() {
                   const linkType = linkTypeByKey[link.key]
                   const query = selection.shipsText.split(',').at(-1)?.trim() ?? ''
                   const showSuggestions = selection.enabled && focusedLinkKey === link.key && query.length > 0
-                  const eligibleShipTypes = group.name === 'Mining' ? shipTypesMining : shipTypesAll
+                  const eligibleShipTypes =
+                    group.name === 'Mining'
+                      ? shipTypesMining
+                      : group.name === 'Expedition'
+                        ? shipTypesExpedition
+                        : shipTypesCombat
                   const suggestions = showSuggestions
                     ? eligibleShipTypes
                         .filter((t) => t.name.toLowerCase().includes(query.toLowerCase()))

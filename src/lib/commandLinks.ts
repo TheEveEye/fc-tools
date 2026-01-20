@@ -43,6 +43,14 @@ export const COMMAND_LINK_GROUPS: CommandLinkGroup[] = [
     ],
   },
   {
+    name: 'Expedition',
+    links: [
+      { key: 'expedition_strength', label: 'Expedition Strength', eveTypeName: 'Expedition Strength Charge' },
+      { key: 'expedition_reach', label: 'Expedition Reach', eveTypeName: 'Expedition Reach Charge' },
+      { key: 'expedition_pinpointing', label: 'Expedition Pinpointing', eveTypeName: 'Expedition Pinpointing Charge' },
+    ],
+  },
+  {
     name: 'Mining',
     links: [
       { key: 'mining_laser_optimization', label: 'Mining Laser Optimization', eveTypeName: 'Mining Laser Optimization Charge' },

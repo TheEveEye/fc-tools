@@ -13,24 +13,16 @@ type EsiNameEntry = {
 }
 
 const ESI_BASE = 'https://esi.evetech.net/latest'
-const CACHE_KEY = 'fc-tools.command-burst.ship-types.v2'
+const CACHE_KEY = 'fc-tools.command-burst.ship-types.v3'
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 14
 
-type GroupSpec = { id: number; name: string }
+const COMBAT_BURST_GROUP_IDS = new Set<number>([1201, 419, 1534, 540, 963, 30])
+const MINING_BURST_GROUP_IDS = new Set<number>([941, 883])
+const EXPEDITION_BURST_GROUP_IDS = new Set<number>([4902])
 
-const COMMAND_BURST_GROUPS: GroupSpec[] = [
-  { id: 1201, name: 'Attack Battlecruiser' },
-  { id: 419, name: 'Combat Battlecruiser' },
-  { id: 1534, name: 'Command Destroyer' },
-  { id: 540, name: 'Command Ship' },
-  { id: 4902, name: 'Expedition Command Ship' },
-  { id: 941, name: 'Industrial Command Ship' },
-  { id: 963, name: 'Strategic Cruiser' },
-  { id: 30, name: 'Titan' },
-  { id: 883, name: 'Capital Industrial Ship' },
-]
-
-const MINING_BURST_GROUP_IDS = new Set<number>([4902, 941, 883])
+const COMMAND_BURST_GROUP_IDS = Array.from(
+  new Set<number>([...COMBAT_BURST_GROUP_IDS, ...MINING_BURST_GROUP_IDS, ...EXPEDITION_BURST_GROUP_IDS]),
+)
 
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = []
@@ -54,10 +46,16 @@ function loadCachedTypes(): EsiInventoryType[] | null {
   const raw = window.localStorage.getItem(CACHE_KEY)
   if (!raw) return null
   try {
-    const parsed = JSON.parse(raw) as { savedAt: number; all: EsiInventoryType[]; mining: EsiInventoryType[] }
-    if (!parsed?.savedAt || !Array.isArray(parsed.all) || !Array.isArray(parsed.mining)) return null
+    const parsed = JSON.parse(raw) as {
+      savedAt: number
+      combat: EsiInventoryType[]
+      mining: EsiInventoryType[]
+      expedition: EsiInventoryType[]
+    }
+    if (!parsed?.savedAt || !Array.isArray(parsed.combat) || !Array.isArray(parsed.mining) || !Array.isArray(parsed.expedition))
+      return null
     if (Date.now() - parsed.savedAt > CACHE_TTL_MS) return null
-    return parsed.all
+    return parsed.combat
   } catch {
     return null
   }
@@ -67,7 +65,12 @@ function loadCachedMiningTypes(): EsiInventoryType[] | null {
   const raw = window.localStorage.getItem(CACHE_KEY)
   if (!raw) return null
   try {
-    const parsed = JSON.parse(raw) as { savedAt: number; all: EsiInventoryType[]; mining: EsiInventoryType[] }
+    const parsed = JSON.parse(raw) as {
+      savedAt: number
+      combat: EsiInventoryType[]
+      mining: EsiInventoryType[]
+      expedition: EsiInventoryType[]
+    }
     if (!parsed?.savedAt || !Array.isArray(parsed.mining)) return null
     if (Date.now() - parsed.savedAt > CACHE_TTL_MS) return null
     return parsed.mining
@@ -76,8 +79,26 @@ function loadCachedMiningTypes(): EsiInventoryType[] | null {
   }
 }
 
-function saveCachedTypes(all: EsiInventoryType[], mining: EsiInventoryType[]) {
-  window.localStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), all, mining }))
+function loadCachedExpeditionTypes(): EsiInventoryType[] | null {
+  const raw = window.localStorage.getItem(CACHE_KEY)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as {
+      savedAt: number
+      combat: EsiInventoryType[]
+      mining: EsiInventoryType[]
+      expedition: EsiInventoryType[]
+    }
+    if (!parsed?.savedAt || !Array.isArray(parsed.expedition)) return null
+    if (Date.now() - parsed.savedAt > CACHE_TTL_MS) return null
+    return parsed.expedition
+  } catch {
+    return null
+  }
+}
+
+function saveCachedTypes(combat: EsiInventoryType[], mining: EsiInventoryType[], expedition: EsiInventoryType[]) {
+  window.localStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), combat, mining, expedition }))
 }
 
 async function fetchGroup(groupId: number): Promise<EsiInventoryGroup> {
@@ -97,26 +118,34 @@ async function postUniverseNames(ids: number[]): Promise<EsiNameEntry[]> {
 }
 
 export type CommandBurstShipTypes = {
-  all: EsiInventoryType[]
+  combat: EsiInventoryType[]
   mining: EsiInventoryType[]
+  expedition: EsiInventoryType[]
 }
 
 export async function fetchCommandBurstShipTypes(): Promise<CommandBurstShipTypes> {
   const cached = loadCachedTypes()
   const cachedMining = loadCachedMiningTypes()
-  if (cached && cachedMining) return { all: cached, mining: cachedMining }
+  const cachedExpedition = loadCachedExpeditionTypes()
+  if (cached && cachedMining && cachedExpedition) return { combat: cached, mining: cachedMining, expedition: cachedExpedition }
 
-  const groups = await Promise.all(COMMAND_BURST_GROUPS.map((g) => fetchGroup(g.id)))
-  const typeIdsAll = Array.from(new Set(groups.flatMap((g) => g.types)))
+  const groups = await Promise.all(COMMAND_BURST_GROUP_IDS.map((id) => fetchGroup(id)))
+  const typeIdsCombat = Array.from(new Set(groups.filter((g) => COMBAT_BURST_GROUP_IDS.has(g.group_id)).flatMap((g) => g.types)))
   const typeIdsMining = Array.from(new Set(groups.filter((g) => MINING_BURST_GROUP_IDS.has(g.group_id)).flatMap((g) => g.types)))
+  const typeIdsExpedition = Array.from(
+    new Set(groups.filter((g) => EXPEDITION_BURST_GROUP_IDS.has(g.group_id)).flatMap((g) => g.types)),
+  )
 
-  const allNameEntries: EsiNameEntry[] = []
-  for (const ids of chunk(typeIdsAll, 1000)) allNameEntries.push(...(await postUniverseNames(ids)))
+  const combatNameEntries: EsiNameEntry[] = []
+  for (const ids of chunk(typeIdsCombat, 1000)) combatNameEntries.push(...(await postUniverseNames(ids)))
 
   const miningNameEntries: EsiNameEntry[] = []
   for (const ids of chunk(typeIdsMining, 1000)) miningNameEntries.push(...(await postUniverseNames(ids)))
 
-  const all = allNameEntries
+  const expeditionNameEntries: EsiNameEntry[] = []
+  for (const ids of chunk(typeIdsExpedition, 1000)) expeditionNameEntries.push(...(await postUniverseNames(ids)))
+
+  const combat = combatNameEntries
     .filter((e) => e.category === 'inventory_type')
     .map((e) => ({ id: e.id, name: e.name }))
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -126,6 +155,11 @@ export async function fetchCommandBurstShipTypes(): Promise<CommandBurstShipType
     .map((e) => ({ id: e.id, name: e.name }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
-  saveCachedTypes(all, mining)
-  return { all, mining }
+  const expedition = expeditionNameEntries
+    .filter((e) => e.category === 'inventory_type')
+    .map((e) => ({ id: e.id, name: e.name }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  saveCachedTypes(combat, mining, expedition)
+  return { combat, mining, expedition }
 }
