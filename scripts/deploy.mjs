@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, { stdio: 'pipe', encoding: 'utf8', ...options })
@@ -28,7 +29,24 @@ function warn(message) {
   process.stderr.write(`${message}\n`)
 }
 
+function readCname() {
+  try {
+    return readFileSync(new URL('../public/CNAME', import.meta.url), 'utf8').trim()
+  } catch {
+    return null
+  }
+}
+
 async function main() {
+  const expectedCname = 'fctools.kiwiapps.dev'
+  const cname = readCname()
+  if (cname !== expectedCname) {
+    warn('Refusing to deploy because the CNAME is missing or incorrect.')
+    warn(`Expected: ${expectedCname}`)
+    warn(`Found: ${cname ?? '(missing)'}`)
+    process.exit(1)
+  }
+
   const branch = runOrThrow('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
   const dirty = runOrThrow('git', ['status', '--porcelain'])
   if (dirty) {
